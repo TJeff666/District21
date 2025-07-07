@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>District21 - Live Crime Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    crossorigin=""
+  />
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+    }
+
+    #map {
+      height: 90vh;
+      width: 100%;
+    }
+
+    #hotspot-list-container {
+      padding: 10px;
+      background: #f2f2f2;
+      border-top: 2px solid #ddd;
+    }
+
+    #hotspot-list h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    #hotspot-list ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    #hotspot-list li {
+      padding: 5px 0;
+    }
+
+    .hotspot-warning {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #ffdddd;
+      padding: 10px;
+      border: 1px solid #ff0000;
+      border-radius: 8px;
+      display: none;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hotspot-warning" id="hotspot-warning"></div>
+  <div id="map"></div>
+
+  <div id="hotspot-list-container">
+    <div id="hotspot-list">
+      <h2>current highest risk crime spots</h2>
+      <ul id="hotspot-list-ul">
+        <li>Loading...</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    crossorigin=""
+  ></script>
+
+  <!-- Leaflet Heat plugin -->
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+  <script>
+    const map = L.map('map').setView([41.8781, -87.6298], 11); // Default to Chicago
+    let heatLayer;
+    let hotspots = [];
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    async function loadCrimes() {
+      const response = await fetch('/api/crimes/');
+      const data = await response.json();
+      const heatData = [];
+
+      map.eachLayer(layer => {
+        if (layer instanceof L.CircleMarker) map.removeLayer(layer);
+      });
+
+      data.forEach(crime => {
+        if (crime.latitude && crime.longitude) {
+          heatData.push([crime.latitude, crime.longitude, 0.6]);
+
+          L.circleMarker([crime.latitude, crime.longitude], {
+            radius: 5,
+            fillColor: 'red',
+            fillOpacity: 0.5,
+            color: '#000',
+            weight: 1
+          }).addTo(map).bindPopup(`${crime.primary_type}<br>${crime.block}`);
+        }
+      });
+
+      if (heatLayer) map.removeLayer(heatLayer);
+      heatLayer = L.heatLayer(heatData, { radius: 25, blur: 15 }).addTo(map);
+    }
+
+    async function loadHotspots() {
+      const response = await fetch('/api/hotspots/');
+      hotspots = await response.json();
+
+      const hotspotList = document.getElementById("hotspot-list-ul");
+      hotspotList.innerHTML = '';
+
+      hotspots.forEach(spot => {
+        const li = document.createElement('li');
+        li.textContent = `${spot.block} – ${spot.total} crimes`;
+        hotspotList.appendChild(li);
+      });
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      function toRad(x) { return x * Math.PI / 180; }
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c * 1000;
+    }
+
+    function checkProximity(userLat, userLon) {
+      hotspots.forEach(spot => {
+        const dist = getDistance(userLat, userLon, spot.latitude, spot.longitude);
+        if (dist < 500) {
+          const warning = document.getElementById('hotspot-warning');
+          warning.style.display = 'block';
+          warning.innerHTML = `⚠️ You are within ${Math.round(dist)} meters of a high-crime zone:<br><strong>${spot.block}</strong>`;
+        }
+      });
+    }
+
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+
+      const userIcon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      });
+
+      L.marker([latitude, longitude], { icon: userIcon })
+        .addTo(map)
+        .bindPopup("📌 You are here");
+        // Removed .openPopup() so map stays on Chicago
+
+      checkProximity(latitude, longitude);
+    }, err => {
+      console.warn("Location access denied. No marker added.");
+    });
+
+    loadCrimes();
+    loadHotspots();
+
+    setInterval(loadCrimes, 10000);
+    setInterval(loadHotspots, 15000);
+  </script>
+</body>
+</html>
