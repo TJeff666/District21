@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>District21 - Live Crime Map</title>
+  <title>District21 - Live Multi-City Crime Map</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Leaflet CSS -->
   <link
@@ -11,6 +11,7 @@
     href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
     crossorigin=""
   />
+
   <style>
     body {
       margin: 0;
@@ -56,13 +57,12 @@
   </style>
 </head>
 <body>
-
   <div class="hotspot-warning" id="hotspot-warning"></div>
   <div id="map"></div>
 
   <div id="hotspot-list-container">
     <div id="hotspot-list">
-      <h2>current highest risk crime spots</h2>
+      <h2>Top Crime Hotspots (All Cities)</h2>
       <ul id="hotspot-list-ul">
         <li>Loading...</li>
       </ul>
@@ -70,18 +70,21 @@
   </div>
 
   <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
-    crossorigin=""
-  ></script>
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" crossorigin=""></script>
 
   <!-- Leaflet Heat plugin -->
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
   <script>
-    const map = L.map('map').setView([41.8781, -87.6298], 11); // Default to Chicago
+    const map = L.map('map').setView([39.8283, -98.5795], 4); // Center of the US
     let heatLayer;
     let hotspots = [];
+
+    const cityColors = {
+      "Chicago": "blue",
+      "NYC": "green",
+      "default": "red"
+    };
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
@@ -97,16 +100,21 @@
       });
 
       data.forEach(crime => {
-        if (crime.latitude && crime.longitude) {
-          heatData.push([crime.latitude, crime.longitude, 0.6]);
+        const { latitude, longitude, primary_type, block, city } = crime;
+        if (latitude && longitude) {
+          heatData.push([latitude, longitude, 0.5]);
 
-          L.circleMarker([crime.latitude, crime.longitude], {
+          const color = cityColors[city] || cityColors['default'];
+
+          L.circleMarker([latitude, longitude], {
             radius: 5,
-            fillColor: 'red',
-            fillOpacity: 0.5,
-            color: '#000',
+            fillColor: color,
+            fillOpacity: 0.6,
+            color: "#000",
             weight: 1
-          }).addTo(map).bindPopup(`${crime.primary_type}<br>${crime.block}`);
+          })
+          .addTo(map)
+          .bindPopup(`${primary_type}<br>${block}<br><b>${city}</b>`);
         }
       });
 
@@ -123,7 +131,7 @@
 
       hotspots.forEach(spot => {
         const li = document.createElement('li');
-        li.textContent = `${spot.block} – ${spot.total} crimes`;
+        li.textContent = `${spot.block} (${spot.city}) – ${spot.total} crimes`;
         hotspotList.appendChild(li);
       });
     }
@@ -146,7 +154,7 @@
         if (dist < 500) {
           const warning = document.getElementById('hotspot-warning');
           warning.style.display = 'block';
-          warning.innerHTML = `⚠️ You are within ${Math.round(dist)} meters of a high-crime zone:<br><strong>${spot.block}</strong>`;
+          warning.innerHTML = `⚠️ You're within ${Math.round(dist)} meters of a hotspot in <strong>${spot.city}</strong>:<br><strong>${spot.block}</strong>`;
         }
       });
     }
@@ -164,11 +172,10 @@
       L.marker([latitude, longitude], { icon: userIcon })
         .addTo(map)
         .bindPopup("📌 You are here");
-        // Removed .openPopup() so map stays on Chicago
 
       checkProximity(latitude, longitude);
     }, err => {
-      console.warn("Location access denied. No marker added.");
+      console.warn("Location access denied.");
     });
 
     loadCrimes();

@@ -2,6 +2,7 @@ from django.db import models
 
 class CrimeEvent(models.Model):
     crime_id = models.CharField(max_length=100, unique=True)
+    city = models.CharField(max_length=100, default="Chicago")
     primary_type = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
     date = models.DateTimeField()
